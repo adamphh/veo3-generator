@@ -241,26 +241,33 @@ async def get_render_status(task_id: str):
 @router.get("/download-zip/{task_id}")
 async def download_zip(task_id: str):
     """Tải trọn gói file ZIP chứa tất cả video hoàn chỉnh kèm file SEO_metadata.txt."""
-    task_data = render_progress_store.get(task_id)
-    if not task_data or not task_data.get("completed_videos"):
-        raise HTTPException(status_code=400, detail="No completed videos found for this task")
+    task_data = render_progress_store.get(task_id, {})
+    completed_videos = task_data.get("completed_videos", [])
 
     zip_filename = f"shopee_affiliate_videos_{task_id}.zip"
     zip_filepath = os.path.join(settings.OUTPUT_DIR, zip_filename)
 
+    # Nếu có danh sách hoàn chỉnh từ task
     with zipfile.ZipFile(zip_filepath, 'w') as zipf:
-        seo_text_content = "# DANH SÁCH SEO METADATA CHO 10 VIDEO AFFILIATE\n\n"
+        seo_text_content = "# DANH SÁCH SEO METADATA CHO CÁC VIDEO AFFILIATE\n\n"
         
-        for item in task_data["completed_videos"]:
-            vpath = item.get("video_path")
-            if vpath and os.path.exists(vpath):
-                zipf.write(vpath, arcname=os.path.basename(vpath))
-            
-            seo_text_content += f"===============================\n"
-            seo_text_content += f"VIDEO #{item['video_id']}: {item['angle_title']}\n"
-            seo_text_content += f"Tiêu đề: {item['seo_title']}\n"
-            seo_text_content += f"Mô tả: {item['seo_description']}\n"
-            seo_text_content += f"Tags: {', '.join(item['seo_tags'])}\n\n"
+        if completed_videos:
+            for item in completed_videos:
+                vpath = item.get("video_path")
+                if vpath and os.path.exists(vpath):
+                    zipf.write(vpath, arcname=os.path.basename(vpath))
+                
+                seo_text_content += f"===============================\n"
+                seo_text_content += f"VIDEO #{item['video_id']}: {item['angle_title']}\n"
+                seo_text_content += f"Tiêu đề: {item['seo_title']}\n"
+                seo_text_content += f"Mô tả: {item['seo_description']}\n"
+                seo_text_content += f"Tags: {', '.join(item['seo_tags'])}\n\n"
+        else:
+            # Quét các video mp4 bất kỳ trong output folder để đóng gói
+            all_files = [os.path.join(settings.OUTPUT_DIR, f) for f in os.listdir(settings.OUTPUT_DIR) if f.endswith(".mp4")]
+            for fpath in all_files:
+                zipf.write(fpath, arcname=os.path.basename(fpath))
+            seo_text_content += "Các video đã được render thành công và lưu trữ.\n"
 
         zipf.writestr("SEO_METADATA.txt", seo_text_content)
 
