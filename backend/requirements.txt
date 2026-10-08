@@ -13,3 +13,6 @@ edge-tts>=6.1.12
 mutagen>=1.47.0
 pillow>=10.4.0
 python-dotenv>=1.0.1
+imageio[ffmpeg]>=2.34.0
+static-ffmpeg>=2.7.0
+

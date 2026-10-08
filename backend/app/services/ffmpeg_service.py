@@ -4,6 +4,8 @@ import logging
 from typing import List, Optional, Dict, Any
 from app.core.config import settings
 
+from app.core.ffmpeg_utils import get_ffmpeg_cmd
+
 logger = logging.getLogger(__name__)
 
 class FFmpegService:
@@ -30,8 +32,9 @@ class FFmpegService:
     ) -> str:
         os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
         final_output_path = os.path.join(settings.OUTPUT_DIR, f"{output_filename}.mp4")
+        ffmpeg_bin = get_ffmpeg_cmd()
         
-        logger.info(f"Rendering Video -> Audio: {audio_path}, Output: {final_output_path}")
+        logger.info(f"Rendering Video with {ffmpeg_bin} -> Audio: {audio_path}, Output: {final_output_path}")
 
         # 1. Tạo file concat list các clips
         concat_list_path = os.path.join(settings.STORAGE_DIR, f"concat_{output_filename}.txt")
@@ -78,7 +81,7 @@ class FFmpegService:
 
         # 3. Lệnh FFmpeg ghép nối Video + Audio Voiceover + Video Filters
         cmd = (
-            f'ffmpeg -y -f concat -safe 0 -i "{concat_list_path}" -i "{audio_path}" '
+            f'{ffmpeg_bin} -y -f concat -safe 0 -i "{concat_list_path}" -i "{audio_path}" '
             f'-vf "{vf_str}" '
             f'-c:v libx264 -preset ultrafast -crf 23 -pix_fmt yuv420p '
             f'-c:a aac -b:a 192k -shortest "{final_output_path}"'
@@ -105,7 +108,7 @@ class FFmpegService:
                     if os.path.exists(clip):
                         f.write(f"file '{os.path.abspath(clip)}'\n")
             fallback_cmd = (
-                f'ffmpeg -y -f concat -safe 0 -i "{fallback_concat}" -i "{audio_path}" '
+                f'{ffmpeg_bin} -y -f concat -safe 0 -i "{fallback_concat}" -i "{audio_path}" '
                 f'-c:v libx264 -preset ultrafast -pix_fmt yuv420p '
                 f'-c:a aac -shortest "{final_output_path}"'
             )
