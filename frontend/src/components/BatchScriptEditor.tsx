@@ -5,13 +5,17 @@ import { Edit3, Play, Volume2, Sparkles, Video, ArrowRight, Tag } from 'lucide-r
 interface BatchScriptEditorProps {
   scripts: VideoScript[];
   onStartRender: (updatedScripts: VideoScript[]) => void;
+  onRenderSingle: (script: VideoScript) => void;
   isLoading: boolean;
+  renderingSingleId: number | null;
 }
 
 export const BatchScriptEditor: React.FC<BatchScriptEditorProps> = ({
   scripts: initialScripts,
   onStartRender,
-  isLoading
+  onRenderSingle,
+  isLoading,
+  renderingSingleId
 }) => {
   const [scripts, setScripts] = useState<VideoScript[]>(initialScripts);
   const [activeTab, setActiveTab] = useState<number>(1);
@@ -33,18 +37,29 @@ export const BatchScriptEditor: React.FC<BatchScriptEditorProps> = ({
             10 Kịch Bản Tiếp Thị Tự Nhiên & SEO Tags (Gemini 2.0)
           </h2>
           <p className="text-sm text-gray-500 mt-1">
-            Được tối ưu theo 10 góc độ Viral. Bạn có thể sửa lời thoại, chọn giọng đọc trước khi render.
+            Được tối ưu theo 10 góc độ Viral. Bạn có thể tạo lẻ từng video hoặc render hàng loạt cả 10 video.
           </p>
         </div>
 
-        <button
-          onClick={() => onStartRender(scripts)}
-          disabled={isLoading}
-          className="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 flex-shrink-0"
-        >
-          <Video className="w-5 h-5" />
-          {isLoading ? 'Đang kích hoạt hàng đợi...' : 'Bắt Đầu Render 10 Video (Veo 3)'}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => onRenderSingle(currentScript)}
+            disabled={isLoading || renderingSingleId !== null}
+            className="px-5 py-3.5 bg-shopee-orange hover:bg-shopee-darkOrange text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+          >
+            <Play className="w-4 h-4 fill-white" />
+            {renderingSingleId === currentScript.video_id ? 'Đang render Video này...' : `⚡ Render Riêng Video #${currentScript.video_id}`}
+          </button>
+
+          <button
+            onClick={() => onStartRender(scripts)}
+            disabled={isLoading || renderingSingleId !== null}
+            className="px-5 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+          >
+            <Video className="w-5 h-5" />
+            {isLoading ? 'Đang khởi chạy...' : 'Render Hàng Loạt 10 Video'}
+          </button>
+        </div>
       </div>
 
       {/* Tabs danh sách 10 Video */}

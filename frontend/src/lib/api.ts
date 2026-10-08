@@ -63,8 +63,13 @@ export const renderBatchVideos = async (data: {
   return resp.data;
 };
 
-export const getRenderStatus = async (taskId: string) => {
-  const resp = await apiClient.get(`/render-status/${taskId}`);
+export const renderSingleVideo = async (data: {
+  product_title: string;
+  image_url?: string;
+  script: VideoScript;
+  social_proof_text?: string;
+}) => {
+  const resp = await apiClient.post('/render-single-video', data);
   return resp.data;
 };
 

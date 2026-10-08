@@ -11,13 +11,23 @@ import {
   scrapeProduct,
   generateScripts,
   renderBatchVideos,
+  renderSingleVideo,
   getRenderStatus
 } from '@/lib/api';
-import { Sparkles, ShoppingBag, ShieldCheck } from 'lucide-react';
+import { Sparkles, ShoppingBag, ShieldCheck, CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 
 export default function Home() {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [renderingSingleId, setRenderingSingleId] = useState<number | null>(null);
+  
+  // Toast Notification State
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 5000);
+  };
   
   // Dữ liệu luồng
   const [productData, setProductData] = useState<ProductData | null>(null);
@@ -34,24 +44,62 @@ export default function Home() {
   const handleProductReady = async (product: ProductData, niche: string) => {
     setIsLoading(true);
     setProductData(product);
+    showToast(`Đang phân tích sản phẩm và tạo 10 kịch bản Marketing...`, 'info');
 
     try {
       const res = await generateScripts(product, niche);
       if (res.data && res.data.scripts) {
         setScripts(res.data.scripts);
         setCurrentStep(2);
+        showToast(`Đã tạo thành công 10 kịch bản & SEO metadata!`, 'success');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error generating scripts:', err);
-      alert('Không thể tạo kịch bản. Vui lòng kiểm tra kết nối Backend API.');
+      showToast(`Không thể tạo kịch bản: ${err.message || 'Lỗi server'}`, 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Bước 2 -> Bước 3: Người dùng duyệt 10 kịch bản và bấm bắt đầu Render
+  // Render 1 Video Đơn Lẻ Ngay Lập Tức
+  const handleRenderSingle = async (script: VideoScript) => {
+    setRenderingSingleId(script.video_id);
+    showToast(`Đang render Video #${script.video_id}: ${script.angle_title}...`, 'info');
+
+    try {
+      const res = await renderSingleVideo({
+        product_title: productData?.title || 'Shopee Product',
+        image_url: productData?.image_urls[0],
+        script: script,
+        social_proof_text: `⭐ ${productData?.rating_star || '4.9'} - Đã bán ${productData?.sold_count || '1.5k'}`
+      });
+
+      if (res && res.status === 'success') {
+        showToast(`🎉 Render thành công Video #${script.video_id}!`, 'success');
+        setCompletedVideos(prev => {
+          const exists = prev.some(v => v.video_id === res.video_id);
+          if (exists) {
+            return prev.map(v => v.video_id === res.video_id ? res : v);
+          }
+          return [...prev, res];
+        });
+        setCurrentStep(3);
+        setRenderStatus('completed');
+        setProgressPercent(100);
+      }
+    } catch (err: any) {
+      console.error('Error rendering single video:', err);
+      showToast(`Lỗi khi render video #${script.video_id}: ${err.message || 'Lỗi xử lý'}`, 'error');
+    } finally {
+      setRenderingSingleId(null);
+    }
+  };
+
+  // Bước 2 -> Bước 3: Người dùng duyệt 10 kịch bản và bấm bắt đầu Render Hàng Loạt
   const handleStartRender = async (updatedScripts: VideoScript[]) => {
     setIsLoading(true);
+    showToast(`Đang khởi chạy tiến trình render hàng loạt 10 Video...`, 'info');
+
     try {
       const res = await renderBatchVideos({
         product_title: productData?.title || 'Shopee Product',
@@ -64,10 +112,11 @@ export default function Home() {
         setTaskId(res.task_id);
         setCurrentStep(3);
         setRenderStatus('processing');
+        showToast(`Tiến trình render đang chạy ngầm trên server.`, 'info');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error starting render:', err);
-      alert('Lỗi khi kích hoạt render video.');
+      showToast(`Lỗi khi kích hoạt render: ${err.message}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -87,6 +136,7 @@ export default function Home() {
           if (status.status === 'completed') {
             setRenderStatus('completed');
             setCurrentStep(4);
+            showToast(`🎉 Hoàn thành xuất sắc toàn bộ 10 video!`, 'success');
             clearInterval(interval);
           }
         } catch (err) {
@@ -106,10 +156,33 @@ export default function Home() {
     setProgressPercent(0);
     setCompletedVideos([]);
     setRenderStatus('idle');
+    setRenderingSingleId(null);
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-between">
+    <main className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-between relative">
+      {/* Toast Notification Floating Banner */}
+      {toast && (
+        <div className="fixed top-5 right-5 z-50 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div
+            className={`flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl border text-sm font-semibold ${
+              toast.type === 'success'
+                ? 'bg-emerald-600 border-emerald-500 text-white'
+                : toast.type === 'error'
+                ? 'bg-rose-600 border-rose-500 text-white'
+                : 'bg-slate-900 border-slate-800 text-white'
+            }`}
+          >
+            {toast.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-200" />}
+            {toast.type === 'error' && <AlertTriangle className="w-5 h-5 text-rose-200" />}
+            {toast.type === 'info' && <Info className="w-5 h-5 text-orange-400" />}
+            <span>{toast.message}</span>
+            <button onClick={() => setToast(null)} className="ml-2 hover:opacity-75">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -150,7 +223,9 @@ export default function Home() {
           <BatchScriptEditor
             scripts={scripts}
             onStartRender={handleStartRender}
+            onRenderSingle={handleRenderSingle}
             isLoading={isLoading}
+            renderingSingleId={renderingSingleId}
           />
         )}
 

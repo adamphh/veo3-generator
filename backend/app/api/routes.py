@@ -142,6 +142,86 @@ async def run_render_pipeline(task_id: str, req: RenderBatchRequest):
     render_progress_store[task_id]["status"] = "completed"
     render_progress_store[task_id]["progress_percent"] = 100
 
+class RenderSingleRequest(BaseModel):
+    product_title: str
+    image_url: Optional[str] = None
+    script: VideoScript
+    social_proof_text: Optional[str] = "⭐ 4.9/5 - Đã bán 2.5k"
+
+@router.post("/render-single-video")
+async def render_single_video(req: RenderSingleRequest):
+    """Render ngay lập tức 1 video đơn lẻ theo kịch bản được chọn."""
+    import uuid
+    task_id = str(uuid.uuid4())[:8]
+    script = req.script
+    
+    # Tải ảnh thumbnail nếu có
+    local_image_path = os.path.join(settings.UPLOADS_DIR, f"thumb_{task_id}.jpg")
+    if req.image_url and req.image_url.startswith("http"):
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(req.image_url, timeout=10.0)
+                if resp.status_code == 200:
+                    with open(local_image_path, "wb") as f:
+                        f.write(resp.content)
+        except Exception:
+            local_image_path = None
+    elif not os.path.exists(local_image_path):
+        local_image_path = None
+
+    try:
+        # 1. Sinh Voiceover TTS & Subtitles
+        tts_res = await tts_service.generate_speech(
+            text=script.voiceover_script,
+            output_filename=f"voice_{task_id}_{script.video_id}",
+            voice_gender=script.voice_gender,
+            voice_accent=script.voice_accent
+        )
+        audio_path = tts_res["audio_path"]
+        duration = tts_res["duration"]
+
+        # 2. Sinh file Subtitle Karaoke .ass
+        ass_path = os.path.join(settings.STORAGE_DIR, f"sub_{task_id}_{script.video_id}.ass")
+        subtitle_service.generate_karaoke_ass(tts_res.get("subtitles", ""), ass_path)
+
+        # 3. Sinh các phân cảnh Video Clips (Veo 3 / Hybrid)
+        clip_paths = []
+        for scene_idx, vp in enumerate(script.veo_prompts, 1):
+            clip = await veo_service.generate_video_clip(
+                prompt=vp.cinematography_prompt,
+                image_path=local_image_path,
+                duration_seconds=int(duration / len(script.veo_prompts)) or 4,
+                output_filename=f"clip_{task_id}_{script.video_id}_{scene_idx}"
+            )
+            clip_paths.append(clip)
+
+        # 4. Ghép nối Video + Overlays + Audio hoàn chỉnh bằng FFmpeg
+        final_video_name = f"video_{task_id}_{script.video_id}"
+        final_path = await ffmpeg_service.render_full_video(
+            clip_paths=clip_paths,
+            audio_path=audio_path,
+            ass_subtitle_path=ass_path,
+            hook_text=script.hook_text_overlay,
+            social_proof_text=req.social_proof_text or "⭐ 4.9/5 - Đã bán 2.5k",
+            output_filename=final_video_name,
+            include_arrow=True
+        )
+
+        return {
+            "status": "success",
+            "video_id": script.video_id,
+            "angle_title": script.angle_title,
+            "video_url": f"/static/output/{final_video_name}.mp4",
+            "video_path": final_path,
+            "seo_title": script.seo_title,
+            "seo_description": script.seo_description,
+            "seo_tags": script.seo_tags
+        }
+    except Exception as e:
+        logger.error(f"Single video render error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/render-batch-videos")
 async def render_batch_videos(req: RenderBatchRequest, background_tasks: BackgroundTasks):
     """Kích hoạt tiến trình ngầm render hàng loạt 10 video."""
